@@ -1,9 +1,12 @@
 function hasAnyMergeFunction(j, root) {
-  const mergeFucntions = ['merge', 'mergeDeep', 'mergeIn', 'mergeDeepIn', 'mergeWith', 'mergeDeepWith'];
+  const mergeFucntions = ['merge', 'mergeDeep', 'mergeIn', 'mergeDeepIn', 'mergeWith', 'mergeDeepWith', 'set', 'setIn'];
   let callExpressions;
   for (let i = 0; i < mergeFucntions.length; i++) {
     callExpressions = root.find(j.CallExpression, {
       callee: {
+        object: {
+          name: 'state',
+        },
         type: 'MemberExpression',
         property: { type: 'Identifier', name: mergeFucntions[i] },
       },
@@ -22,7 +25,10 @@ function transformMergeFunctions(j, root, mergeFunction = 'merge') {
         property: { type: 'Identifier', name: mergeFunction },
       },
     }
-  );
+  ).filter(e => {
+      // filter out arguments that already have fromJS
+      return !(e.node.arguments[0].callee && e.node.arguments[0].callee.name === 'fromJS')
+    })
 
   callExpressions.replaceWith(nodePath => {
       const { node } = nodePath;
@@ -41,7 +47,10 @@ function transformMergeInOrWithFunctions(j, root, mergeFunction = 'mergeIn') {
         property: { type: 'Identifier', name: mergeFunction },
       },
     }
-  );
+  ).filter(e => {
+    // filter out params already wrapped with fromJS
+      return !(e.node.arguments[1].callee && e.node.arguments[1].callee.name === 'fromJS')
+  })
 
   callExpressions.replaceWith(nodePath => {
       const { node } = nodePath;
@@ -67,7 +76,7 @@ module.exports = function transform(file, api) {
   const j = api.jscodeshift;
   let root = j(file.source);
 
-  // if file doesn't have merge function, there is no need to change
+  // if file doesn't have state.<mergeFunction>, don't do anything to it
   if (!hasAnyMergeFunction(j, root)) {
     return;
   }
@@ -118,7 +127,7 @@ module.exports = function transform(file, api) {
     root = transformMergeFunctions(j, root, mergeFunction);
   });
 
-  ['mergeIn', 'mergeDeepIn', 'mergeWith', 'mergeDeepWith'].forEach((mergeFunction) => {
+  ['mergeIn', 'mergeDeepIn', 'mergeWith', 'mergeDeepWith', 'set', 'setIn'].forEach((mergeFunction) => {
     root = transformMergeInOrWithFunctions(j, root, mergeFunction);
   });
 
